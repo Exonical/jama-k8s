@@ -1,0 +1,16 @@
+# Kustomize overlay (staging) — renders the jama-connect Helm chart with staging values.
+# Build with:  kustomize build --enable-helm overlays/staging
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: jama-staging
+
+helmGlobals:
+  chartHome: ../../charts
+
+helmCharts:
+  - name: jama-connect
+    releaseName: jama
+    namespace: jama-staging
+    valuesFile: ../../values/staging.yaml
+    includeCRDs: true

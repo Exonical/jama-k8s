@@ -1,0 +1,39 @@
+{{- /* Standalone PVCs for Deployment components (StatefulSets use volumeClaimTemplates). */ -}}
+{{- range $name, $comp := .Values.components }}
+{{- if and $comp.enabled (eq $comp.kind "Deployment") $comp.persistence.enabled $comp.persistence.standalone }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: volume-{{ $name }}-0
+  namespace: {{ include "jama.namespace" $ }}
+  labels:
+    {{- include "jama.componentLabels" (dict "ctx" $ "name" $name) | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml ($comp.persistence.accessModes | default (list "ReadWriteOnce")) | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ $comp.persistence.size }}
+  {{- include "jama.storageClass" (dict "ctx" $ "sc" ($comp.persistence.storageClass | default "")) | nindent 2 }}
+{{- end }}
+{{- end }}
+
+{{- /* Shared RWX tenantfs PVC. */ -}}
+{{- if and .Values.sharedStorage.tenantfs.enabled (not .Values.sharedStorage.tenantfs.existingClaim) }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.sharedStorage.tenantfs.name }}
+  namespace: {{ include "jama.namespace" . }}
+  labels:
+    {{- include "jama.componentLabels" (dict "ctx" . "name" "tenantfs") | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.sharedStorage.tenantfs.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.sharedStorage.tenantfs.size }}
+  {{- include "jama.storageClass" (dict "ctx" . "sc" .Values.sharedStorage.tenantfs.storageClass) | nindent 2 }}
+{{- end }}

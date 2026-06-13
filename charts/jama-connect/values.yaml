@@ -1,0 +1,434 @@
+# =============================================================================
+# Jama Connect — default values
+# =============================================================================
+# This file is the full configuration surface for deploying Jama Connect into
+# an existing Kubernetes cluster WITHOUT the KOTS/kURL installer.
+#
+# IMPORTANT — placeholders:
+#   Container image repositories/tags, container ports, env vars and probe
+#   paths below are PLACEHOLDERS derived from Jama's public self-hosted docs.
+#   They MUST be reconciled against the manifests rendered from your licensed
+#   KOTS application bundle:  `scripts/kots-pull.sh -l license.yaml`
+#   Lines that require operator input are marked:  # OPERATOR:
+#
+# Nothing here bypasses Jama licensing. The license remains the entitlement
+# mechanism and is supplied via `license.existingSecret` (see below).
+# =============================================================================
+
+global:
+  # Image registry prefix applied to every component image unless the component
+  # overrides it. Point this at the registry where you have mirrored Jama's
+  # images (Jama ships images via the Replicated registry / airgap bundle).
+  imageRegistry: "registry.replicated.com"   # OPERATOR: set to your mirror, e.g. registry.example.com/jama
+  # Default image tag used when a component does not set its own tag.
+  # Typically the Jama Connect release, e.g. "9.28.0".
+  imageTag: ""                                # OPERATOR: set from kots pull (defaults to .Chart.appVersion)
+  imagePullPolicy: IfNotPresent
+  # Image pull secrets referenced by every pod (names of pre-existing secrets,
+  # or created below via imagePullSecret.create).
+  imagePullSecrets: []                        # e.g. [{ name: jama-registry }]
+  # StorageClass applied to all PVCs unless a component overrides it.
+  # Empty string => use the cluster's default StorageClass.
+  storageClass: ""                            # OPERATOR: e.g. "ceph-rbd", "gp3", "longhorn"
+  # Fully-qualified hostname users browse to. Drives ingress + app base URL.
+  fqdn: "jama.example.com"                    # OPERATOR: set your real FQDN
+
+# Optional: render an explicit Namespace object. When deploying with Helm the
+# release namespace is normally created by `helm install -n ... --create-namespace`.
+namespace:
+  create: false
+  name: ""        # empty => release namespace
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Extra labels/annotations applied to all rendered objects.
+commonLabels: {}
+commonAnnotations: {}
+
+# -----------------------------------------------------------------------------
+# Jama license (REQUIRED — do not remove). Operator-provided.
+# Create a Secret containing your Jama/Replicated license file, e.g.:
+#   kubectl -n <ns> create secret generic jama-license \
+#     --from-file=license.yaml=./license.yaml
+# Then set license.existingSecret: jama-license
+# -----------------------------------------------------------------------------
+license:
+  existingSecret: ""          # OPERATOR: name of the Secret holding the license
+  secretKey: "license.yaml"   # key within that Secret
+  mountPath: "/etc/jama/license"
+
+# -----------------------------------------------------------------------------
+# Image pull secret creation (optional convenience). Prefer referencing a
+# pre-existing secret via global.imagePullSecrets in production/GitOps.
+# Never commit real credentials — leave these empty and use --set or a sealed
+# secret / external-secrets operator instead.
+# -----------------------------------------------------------------------------
+imagePullSecret:
+  create: false
+  name: "jama-registry"
+  registry: "registry.replicated.com"
+  username: ""    # OPERATOR: provide at install time, do NOT commit
+  password: ""    # OPERATOR: provide at install time, do NOT commit
+  email: ""
+
+# -----------------------------------------------------------------------------
+# External database (operator-provided). Per Jama docs the DB MUST run on a
+# separate server (MySQL 8.0/8.4 or MS SQL Server 2022) and is NOT bundled.
+# Jama uses three logical databases. Provide credentials via an existing Secret.
+# -----------------------------------------------------------------------------
+database:
+  type: "mysql"               # mysql | sqlserver
+  host: ""                    # OPERATOR: db.example.com
+  port: 3306                  # 3306 (mysql) / 1433 (sqlserver)
+  # Logical database names (Jama creates/uses three).
+  names:
+    core: "jama"
+    oauth: "oauth"
+    saml: "saml"
+  # Credentials: reference a pre-existing Secret with keys username/password.
+  # Do NOT put credentials in this file.
+  existingSecret: ""          # OPERATOR: e.g. jama-db
+  usernameKey: "username"
+  passwordKey: "password"
+  # Extra JDBC params if needed (e.g. "useSSL=true&requireSSL=true").
+  params: ""
+
+# -----------------------------------------------------------------------------
+# SMTP (outbound email). Operator-provided.
+# -----------------------------------------------------------------------------
+smtp:
+  enabled: false
+  host: ""                    # OPERATOR
+  port: 587
+  fromAddress: "jama@example.com"
+  tls: true
+  auth: false
+  existingSecret: ""          # keys: username/password (only if auth: true)
+  usernameKey: "username"
+  passwordKey: "password"
+
+# -----------------------------------------------------------------------------
+# SSO. Jama runs dedicated `saml` and `oauth` services. These toggles drive
+# app configuration; identity-provider metadata is entered in the Jama UI or
+# supplied via the values below / an existing Secret.
+# -----------------------------------------------------------------------------
+sso:
+  saml:
+    enabled: false
+    # Provide IdP metadata XML via a Secret (key: metadata.xml) or paste in UI.
+    metadataExistingSecret: ""
+    metadataKey: "metadata.xml"
+    entityId: ""
+  oidc:
+    enabled: false
+    issuerUrl: ""
+    clientId: ""
+    existingSecret: ""        # key: client-secret
+    clientSecretKey: "client-secret"
+    scopes: "openid,profile,email"
+
+# -----------------------------------------------------------------------------
+# Elasticsearch (in-cluster search backend). StatefulSet with N replicas.
+# Requires vm.max_map_count=262144 on nodes (see docs/INSTALL.md preflight).
+# -----------------------------------------------------------------------------
+elasticsearch:
+  replicas: 3
+  heapSize: "4g"              # ES_JAVA_OPTS -Xms/-Xmx
+  # Container memory limit must exceed heap (Jama recommends 8Gi container / 6g heap).
+  storageSize: "50Gi"
+
+# -----------------------------------------------------------------------------
+# Shared filesystem (RWX). Jama uses a shared `tenantfs` PVC across core pods
+# for attachments/tenant assets. Requires a ReadWriteMany-capable StorageClass
+# (NFS, CephFS, Azure Files, EFS, …). If your storage cannot do RWX, see
+# docs/LIMITATIONS.md.
+# -----------------------------------------------------------------------------
+sharedStorage:
+  tenantfs:
+    enabled: true
+    name: "tenantfs"
+    size: "100Gi"
+    accessModes: ["ReadWriteMany"]
+    storageClass: ""          # OPERATOR: RWX-capable class; empty => global.storageClass
+    mountPath: "/mnt/tenantfs"
+    existingClaim: ""         # set to reuse an existing PVC instead of creating one
+
+# -----------------------------------------------------------------------------
+# Ingress. Two modes:
+#   type: ingress  -> standard networking.k8s.io/v1 Ingress (works with any
+#                     controller: nginx, contour, traefik, istio, …)
+#   type: httpproxy-> Contour HTTPProxy CRD (Jama's bundled ingress is Contour)
+# TLS is operator-provided (cert-manager annotation or a pre-created Secret).
+# -----------------------------------------------------------------------------
+ingress:
+  enabled: true
+  type: "ingress"             # ingress | httpproxy
+  className: "nginx"          # OPERATOR: your IngressClass (nginx, contour, …)
+  # Service that terminates app HTTP traffic. Jama fronts the app with `nginx`.
+  backendService: "nginx"
+  backendPort: 80
+  annotations: {}             # e.g. cert-manager.io/cluster-issuer: letsencrypt
+  path: "/"
+  pathType: "Prefix"
+  tls:
+    enabled: true
+    # Provide ONE of:
+    #  - secretName of a pre-created TLS secret, or
+    #  - rely on cert-manager via annotations above (leave secretName, set issuer).
+    secretName: "jama-tls"    # OPERATOR
+  extraHosts: []              # additional hostnames if needed
+
+# -----------------------------------------------------------------------------
+# RBAC / ServiceAccount.
+# -----------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  name: ""                    # empty => generated
+  annotations: {}
+rbac:
+  create: true                # minimal Role/RoleBinding (namespaced)
+
+# -----------------------------------------------------------------------------
+# NetworkPolicies. Default-deny ingress with explicit allows between tiers.
+# Disabled by default; enable in staging/prod overlays.
+# -----------------------------------------------------------------------------
+networkPolicy:
+  enabled: false
+  # CIDR/namespace selectors for clients allowed to reach the ingress backend.
+  allowExternalIngress: true
+
+# -----------------------------------------------------------------------------
+# Prometheus monitoring (optional; requires prometheus-operator CRDs).
+# -----------------------------------------------------------------------------
+monitoring:
+  serviceMonitor:
+    enabled: false
+    interval: "30s"
+    labels: {}
+
+# -----------------------------------------------------------------------------
+# Pod security defaults applied to every component unless overridden.
+# -----------------------------------------------------------------------------
+podSecurityContext:
+  runAsNonRoot: false         # OPERATOR: confirm against rendered manifests; ES/Tomcat may need specific UIDs
+  fsGroup: 1000
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop: ["ALL"]
+
+# Application-level configuration injected as a ConfigMap (non-secret).
+# Advanced startup settings from the KOTS "Advanced" screen go here.
+appConfig:
+  # Example values from Jama support docs; adjust as needed.
+  jamasearch.multithreadindex.chunksize: "1000"
+  jamasearch.multithreadindex.poolsize: "10"
+  # Add any "advanced startup settings" key=value pairs here.
+
+# -----------------------------------------------------------------------------
+# tenant-manager: one-shot Job that provisions the Jama tenant (run as a Helm
+# post-install/post-upgrade hook). Mirrors the KOTS `tenant-manager` job.
+# -----------------------------------------------------------------------------
+tenantManager:
+  enabled: true
+  image:
+    repository: "jama/tenant-manager"   # OPERATOR: confirm from kots pull
+    tag: ""
+  backoffLimit: 3
+  resources: {}
+
+# =============================================================================
+# Components — the Jama Connect workload topology.
+# Names, kinds and PVC names match Jama's public self-hosted documentation.
+# Image repositories/tags, ports, probes and env are PLACEHOLDERS — reconcile
+# with `scripts/kots-pull.sh` output before production use.
+# Each component shares the schema documented in docs/CHART.md.
+# =============================================================================
+components:
+
+  core:
+    enabled: true
+    kind: StatefulSet
+    replicas: 1
+    image: { repository: "jama/core", tag: "" }         # OPERATOR
+    ports:
+      - { name: http, containerPort: 8080 }
+    service:
+      enabled: true
+      type: ClusterIP
+      ports: [{ name: http, port: 8080, targetPort: http }]
+    persistence:
+      enabled: true
+      size: "20Gi"
+      accessModes: ["ReadWriteOnce"]
+      mountPath: "/opt/jama/data"
+    mountTenantfs: true
+    resources:
+      requests: { cpu: "2", memory: "8Gi" }
+      limits: { memory: "12Gi" }
+    readinessProbe: { httpGet: { path: "/", port: http }, initialDelaySeconds: 60, periodSeconds: 15 }
+    livenessProbe: { httpGet: { path: "/", port: http }, initialDelaySeconds: 180, periodSeconds: 30 }
+
+  core-ingress:
+    enabled: true
+    kind: StatefulSet
+    replicas: 1
+    image: { repository: "jama/core", tag: "" }         # OPERATOR
+    ports: [{ name: http, containerPort: 8080 }]
+    service:
+      enabled: true
+      type: ClusterIP
+      ports: [{ name: http, port: 8080, targetPort: http }]
+    persistence: { enabled: true, size: "10Gi", accessModes: ["ReadWriteOnce"], mountPath: "/opt/jama/data" }
+    mountTenantfs: true
+    resources: { requests: { cpu: "1", memory: "4Gi" }, limits: { memory: "6Gi" } }
+
+  core-jobs:
+    enabled: true
+    kind: StatefulSet
+    replicas: 1
+    image: { repository: "jama/core", tag: "" }         # OPERATOR
+    ports: [{ name: http, containerPort: 8080 }]
+    service:
+      enabled: true
+      type: ClusterIP
+      ports: [{ name: http, port: 8080, targetPort: http }]
+    persistence: { enabled: true, size: "10Gi", accessModes: ["ReadWriteOnce"], mountPath: "/opt/jama/data" }
+    mountTenantfs: true
+    resources: { requests: { cpu: "1", memory: "4Gi" }, limits: { memory: "6Gi" } }
+
+  core-reports:
+    enabled: true
+    kind: StatefulSet
+    replicas: 1
+    image: { repository: "jama/core", tag: "" }         # OPERATOR
+    ports: [{ name: http, containerPort: 8080 }]
+    service:
+      enabled: true
+      type: ClusterIP
+      ports: [{ name: http, port: 8080, targetPort: http }]
+    persistence: { enabled: true, size: "10Gi", accessModes: ["ReadWriteOnce"], mountPath: "/opt/jama/data" }
+    mountTenantfs: true
+    resources: { requests: { cpu: "1", memory: "4Gi" }, limits: { memory: "6Gi" } }
+
+  activemq:
+    enabled: true
+    kind: StatefulSet
+    replicas: 1
+    image: { repository: "jama/activemq", tag: "" }     # OPERATOR
+    ports:
+      - { name: openwire, containerPort: 61616 }
+      - { name: console, containerPort: 8161 }
+    service:
+      enabled: true
+      type: ClusterIP
+      ports:
+        - { name: openwire, port: 61616, targetPort: openwire }
+    persistence: { enabled: true, size: "10Gi", accessModes: ["ReadWriteOnce"], mountPath: "/opt/activemq/data" }
+    resources: { requests: { cpu: "500m", memory: "1Gi" }, limits: { memory: "2Gi" } }
+
+  hazelcast:
+    enabled: true
+    kind: StatefulSet
+    replicas: 1
+    image: { repository: "jama/hazelcast", tag: "" }    # OPERATOR
+    ports: [{ name: hazelcast, containerPort: 5701 }]
+    service:
+      enabled: true
+      type: ClusterIP
+      ports: [{ name: hazelcast, port: 5701, targetPort: hazelcast }]
+    persistence: { enabled: true, size: "5Gi", accessModes: ["ReadWriteOnce"], mountPath: "/data" }
+    resources: { requests: { cpu: "500m", memory: "2Gi" }, limits: { memory: "3Gi" } }
+
+  elasticsearch:
+    enabled: true
+    kind: StatefulSet
+    replicas: 3                # overridden by .Values.elasticsearch.replicas in templates
+    image: { repository: "jama/elasticsearch", tag: "" } # OPERATOR
+    ports:
+      - { name: http, containerPort: 9200 }
+      - { name: transport, containerPort: 9300 }
+    service:
+      enabled: true
+      type: ClusterIP
+      ports: [{ name: http, port: 9200, targetPort: http }]
+    # Headless service for node discovery (svc/elasticsearch-discovery).
+    extraServices:
+      - name: elasticsearch-discovery
+        headless: true
+        ports: [{ name: transport, port: 9300, targetPort: transport }]
+    persistence: { enabled: true, size: "50Gi", accessModes: ["ReadWriteOnce"], mountPath: "/usr/share/elasticsearch/data" }
+    # ES needs an init container to satisfy vm.max_map_count if not set on nodes.
+    sysctlInitContainer: true
+    resources: { requests: { cpu: "1", memory: "8Gi" }, limits: { memory: "8Gi" } }
+
+  search:
+    enabled: true
+    kind: Deployment
+    replicas: 1
+    image: { repository: "jama/search", tag: "" }       # OPERATOR
+    ports: [{ name: http, containerPort: 8080 }]
+    service:
+      enabled: true
+      type: ClusterIP
+      ports: [{ name: http, port: 8080, targetPort: http }]
+    persistence: { enabled: true, standalone: true, size: "10Gi", accessModes: ["ReadWriteOnce"], mountPath: "/data" }
+    resources: { requests: { cpu: "500m", memory: "2Gi" }, limits: { memory: "3Gi" } }
+
+  diff:
+    enabled: true
+    kind: Deployment
+    replicas: 1
+    image: { repository: "jama/diff", tag: "" }         # OPERATOR
+    ports: [{ name: http, containerPort: 8080 }]
+    service:
+      enabled: true
+      type: ClusterIP
+      ports: [{ name: http, port: 8080, targetPort: http }]
+    persistence: { enabled: true, standalone: true, size: "5Gi", accessModes: ["ReadWriteOnce"], mountPath: "/data" }
+    resources: { requests: { cpu: "250m", memory: "1Gi" }, limits: { memory: "2Gi" } }
+
+  saml:
+    enabled: true
+    kind: Deployment
+    replicas: 1
+    image: { repository: "jama/saml", tag: "" }         # OPERATOR
+    ports: [{ name: http, containerPort: 8080 }]
+    service:
+      enabled: true
+      type: ClusterIP
+      ports: [{ name: http, port: 8080, targetPort: http }]
+    persistence: { enabled: true, standalone: true, size: "2Gi", accessModes: ["ReadWriteOnce"], mountPath: "/data" }
+    resources: { requests: { cpu: "250m", memory: "512Mi" }, limits: { memory: "1Gi" } }
+
+  oauth:
+    enabled: true
+    kind: Deployment
+    replicas: 1
+    image: { repository: "jama/oauth", tag: "" }        # OPERATOR
+    ports: [{ name: http, containerPort: 8080 }]
+    service:
+      enabled: true
+      type: ClusterIP
+      ports: [{ name: http, port: 8080, targetPort: http }]
+    persistence: { enabled: true, standalone: true, size: "2Gi", accessModes: ["ReadWriteOnce"], mountPath: "/data" }
+    resources: { requests: { cpu: "250m", memory: "512Mi" }, limits: { memory: "1Gi" } }
+
+  nginx:
+    enabled: true
+    kind: Deployment
+    replicas: 1
+    image: { repository: "jama/nginx", tag: "" }        # OPERATOR
+    ports:
+      - { name: http, containerPort: 80 }
+      - { name: https, containerPort: 443 }
+    service:
+      enabled: true
+      type: ClusterIP
+      ports:
+        - { name: http, port: 80, targetPort: http }
+        - { name: https, port: 443, targetPort: https }
+    persistence: { enabled: true, standalone: true, size: "2Gi", accessModes: ["ReadWriteOnce"], mountPath: "/data" }
+    resources: { requests: { cpu: "100m", memory: "128Mi" }, limits: { memory: "256Mi" } }

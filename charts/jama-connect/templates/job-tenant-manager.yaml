@@ -1,0 +1,43 @@
+{{- if .Values.tenantManager.enabled }}
+{{- /*
+tenant-manager provisions the Jama tenant. In KOTS this runs as a Job after
+config is applied. Here it runs as a Helm post-install/post-upgrade hook.
+Confirm the image and command against the rendered KOTS manifests.
+*/ -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "jama.fullname" . }}-tenant-manager
+  namespace: {{ include "jama.namespace" . }}
+  labels:
+    {{- include "jama.componentLabels" (dict "ctx" . "name" "tenant-manager") | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.tenantManager.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "jama.componentSelectorLabels" (dict "ctx" . "name" "tenant-manager") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "jama.serviceAccountName" . }}
+      {{- include "jama.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: tenant-manager
+          image: {{ include "jama.image" (dict "ctx" . "image" .Values.tenantManager.image) | quote }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            {{- include "jama.commonEnv" (dict "ctx" . "name" "tenant-manager" "comp" (dict "env" list)) | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "jama.fullname" . }}-config
+          {{- with .Values.tenantManager.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

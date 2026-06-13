@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jama
+  labels:
+    app.kubernetes.io/part-of: jama-connect
+    # Uncomment to opt into Pod Security Standards once probes/UIDs are confirmed:
+    # pod-security.kubernetes.io/enforce: baseline

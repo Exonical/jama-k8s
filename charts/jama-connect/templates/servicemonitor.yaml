@@ -1,0 +1,25 @@
+{{- if .Values.monitoring.serviceMonitor.enabled }}
+{{- /* Requires the Prometheus Operator (monitoring.coreos.com) CRDs. */ -}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "jama.fullname" . }}
+  namespace: {{ include "jama.namespace" . }}
+  labels:
+    {{- include "jama.labels" . | nindent 4 }}
+    {{- with .Values.monitoring.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ include "jama.namespace" . }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: jama-connect
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  endpoints:
+    - port: http
+      interval: {{ .Values.monitoring.serviceMonitor.interval }}
+      path: /metrics
+{{- end }}

@@ -1,0 +1,48 @@
+# Dev environment overrides for the jama-connect chart.
+# Usage: helm upgrade --install jama charts/jama-connect -n jama-dev -f values/dev.yaml
+global:
+  fqdn: "jama.dev.example.com"        # OPERATOR
+  storageClass: ""                    # OPERATOR: dev StorageClass
+  imageTag: ""                        # OPERATOR: from kots pull
+
+# Minimal footprint for development.
+elasticsearch:
+  replicas: 1
+  heapSize: "1g"
+  storageSize: "20Gi"
+
+sharedStorage:
+  tenantfs:
+    size: "20Gi"
+    # Dev clusters often lack RWX storage. If so, run a single core replica and
+    # switch this to ReadWriteOnce (documented trade-off in docs/LIMITATIONS.md).
+    accessModes: ["ReadWriteMany"]
+
+ingress:
+  className: "nginx"                  # OPERATOR
+  tls:
+    enabled: false                    # dev: terminate TLS at controller or skip
+
+networkPolicy:
+  enabled: false
+
+monitoring:
+  serviceMonitor:
+    enabled: false
+
+# Shrink resource requests so the stack fits a small dev cluster.
+components:
+  core:
+    resources:
+      requests: { cpu: "500m", memory: "2Gi" }
+      limits: { memory: "4Gi" }
+  core-ingress:
+    enabled: false
+  core-jobs:
+    enabled: false
+  core-reports:
+    enabled: false
+  elasticsearch:
+    resources:
+      requests: { cpu: "500m", memory: "2Gi" }
+      limits: { memory: "2Gi" }

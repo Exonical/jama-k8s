@@ -1,0 +1,22 @@
+# License-rendered output — may contain license-derived secrets. NEVER commit.
+_kots-rendered/
+*.airgap
+license.yaml
+license*.yaml
+*-license.yaml
+
+# Real secrets (templates use *.example.yaml and are allowed)
+*secret*.yaml
+!*.example.yaml
+!**/templates/**
+!charts/**/templates/**
+
+# Helm
+*.tgz
+charts/**/charts/
+charts/**/Chart.lock
+
+# Editor/OS
+.DS_Store
+*.swp
+*.tmp

@@ -1,0 +1,51 @@
+name: validate
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  helm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          set -euo pipefail
+          # helm
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          # kustomize
+          curl -fsSL "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+          # kubeconform
+          curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
+            | tar xz && sudo mv kubeconform /usr/local/bin/
+
+      - name: helm lint
+        run: helm lint charts/jama-connect
+
+      - name: helm template + kubeconform (default)
+        run: |
+          helm template jama charts/jama-connect -n jama \
+            --set license.existingSecret=jama-license \
+          | kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version 1.29.0
+
+      - name: kustomize build + kubeconform (overlays)
+        run: |
+          set -euo pipefail
+          for env in dev staging prod; do
+            echo "== $env =="
+            kustomize build --enable-helm --load-restrictor LoadRestrictionsNone "overlays/$env" \
+              | kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version 1.29.0
+          done
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          shellcheck scripts/*.sh

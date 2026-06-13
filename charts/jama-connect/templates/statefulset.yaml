@@ -1,0 +1,47 @@
+{{- range $name, $comp := .Values.components }}
+{{- if and $comp.enabled (eq $comp.kind "StatefulSet") }}
+{{- $replicas := $comp.replicas }}
+{{- if eq $name "elasticsearch" }}{{- $replicas = $.Values.elasticsearch.replicas }}{{- end }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "jama.namespace" $ }}
+  labels:
+    {{- include "jama.componentLabels" (dict "ctx" $ "name" $name) | nindent 4 }}
+  {{- with $.Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  serviceName: {{ $name }}
+  replicas: {{ $replicas }}
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      {{- include "jama.componentSelectorLabels" (dict "ctx" $ "name" $name) | nindent 6 }}
+  {{- include "jama.podTemplate" (dict "ctx" $ "name" $name "comp" $comp) | nindent 2 }}
+  {{- if $comp.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: volume
+        labels:
+          {{- include "jama.componentSelectorLabels" (dict "ctx" $ "name" $name) | nindent 10 }}
+      spec:
+        accessModes:
+          {{- toYaml ($comp.persistence.accessModes | default (list "ReadWriteOnce")) | nindent 10 }}
+        {{- $sc := $comp.persistence.storageClass | default "" }}
+        {{- if eq $name "elasticsearch" }}
+        resources:
+          requests:
+            storage: {{ $.Values.elasticsearch.storageSize }}
+        {{- else }}
+        resources:
+          requests:
+            storage: {{ $comp.persistence.size }}
+        {{- end }}
+        {{- include "jama.storageClass" (dict "ctx" $ "sc" $sc) | nindent 8 }}
+  {{- end }}
+{{- end }}
+{{- end }}

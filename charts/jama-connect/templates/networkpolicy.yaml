@@ -1,0 +1,40 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- /*
+Default-deny ingress for the namespace, with intra-namespace traffic allowed so
+Jama components can talk to each other, plus optional external ingress to the
+front-end service. Egress is left open (Jama needs DB, SMTP, and license/registry
+reachability). Tighten egress per your environment.
+*/ -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "jama.fullname" . }}-default-deny-ingress
+  namespace: {{ include "jama.namespace" . }}
+  labels:
+    {{- include "jama.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+  ingress:
+    # Allow all traffic from pods within the same namespace (inter-tier comms).
+    - from:
+        - podSelector: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "jama.fullname" . }}-allow-frontend
+  namespace: {{ include "jama.namespace" . }}
+  labels:
+    {{- include "jama.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "jama.componentSelectorLabels" (dict "ctx" . "name" .Values.ingress.backendService) | nindent 6 }}
+  policyTypes: ["Ingress"]
+  ingress:
+    {{- if .Values.networkPolicy.allowExternalIngress }}
+    # Allow ingress to the front-end from anywhere (the ingress controller).
+    - {}
+    {{- end }}
+{{- end }}

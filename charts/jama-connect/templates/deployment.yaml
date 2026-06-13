@@ -1,0 +1,22 @@
+{{- range $name, $comp := .Values.components }}
+{{- if and $comp.enabled (eq $comp.kind "Deployment") }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "jama.namespace" $ }}
+  labels:
+    {{- include "jama.componentLabels" (dict "ctx" $ "name" $name) | nindent 4 }}
+  {{- with $.Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ $comp.replicas }}
+  selector:
+    matchLabels:
+      {{- include "jama.componentSelectorLabels" (dict "ctx" $ "name" $name) | nindent 6 }}
+  {{- include "jama.podTemplate" (dict "ctx" $ "name" $name "comp" $comp) | nindent 2 }}
+{{- end }}
+{{- end }}
