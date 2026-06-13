@@ -21,6 +21,7 @@
 | `saml` | Deployment saml | 8080/http | SAML SSO |
 | `oauth` | Deployment oauth | 8080/http | OAuth/OIDC |
 | `nginx` | Deployment nginx | 80/http, 443/https | internal reverse proxy (ingress backend) |
+| `<name>-headless` | each StatefulSet | same as primary | **headless** governing service (`clusterIP: None`) for stable per-pod DNS (`spec.serviceName`) |
 
 ## Ingress
 

@@ -15,7 +15,7 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  serviceName: {{ $name }}
+  serviceName: {{ $name }}-headless
   replicas: {{ $replicas }}
   podManagementPolicy: Parallel
   selector:

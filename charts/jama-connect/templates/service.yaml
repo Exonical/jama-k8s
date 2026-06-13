@@ -18,6 +18,26 @@ spec:
   ports:
     {{- toYaml $comp.service.ports | nindent 4 }}
 {{- end }}
+{{- /* Headless governing service for StatefulSets: stable per-pod DNS for spec.serviceName. */ -}}
+{{- if and $comp.enabled (eq $comp.kind "StatefulSet") }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-headless
+  namespace: {{ include "jama.namespace" $ }}
+  labels:
+    {{- include "jama.componentLabels" (dict "ctx" $ "name" $name) | nindent 4 }}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    {{- include "jama.componentSelectorLabels" (dict "ctx" $ "name" $name) | nindent 4 }}
+  {{- with $comp.service.ports }}
+  ports:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
 {{- /* Extra services (e.g. elasticsearch-discovery headless). */ -}}
 {{- range $svc := ($comp.extraServices | default list) }}
 {{- if $comp.enabled }}

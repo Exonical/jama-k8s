@@ -98,9 +98,10 @@ Registry: global.imageRegistry prefix (if set and repo is not already fully qual
 {{- $registry := $ctx.Values.global.imageRegistry -}}
 {{- $repo := $img.repository -}}
 {{- $tag := $img.tag | default $ctx.Values.global.imageTag | default $ctx.Chart.AppVersion -}}
-{{- if and $registry (not (contains "/" (regexReplaceAll "/.*" $repo ""))) -}}
-{{- printf "%s/%s:%s" (trimSuffix "/" $registry) $repo $tag -}}
-{{- else if $registry -}}
+{{/* First path segment is a registry host if it has a "." or ":" or is "localhost". */}}
+{{- $firstSegment := regexReplaceAll "/.*" $repo "" -}}
+{{- $isQualified := or (contains "." $firstSegment) (contains ":" $firstSegment) (eq $firstSegment "localhost") -}}
+{{- if and $registry (not $isQualified) -}}
 {{- printf "%s/%s:%s" (trimSuffix "/" $registry) $repo $tag -}}
 {{- else -}}
 {{- printf "%s:%s" $repo $tag -}}
