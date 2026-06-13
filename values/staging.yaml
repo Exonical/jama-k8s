@@ -1,0 +1,32 @@
+# Staging environment overrides for the jama-connect chart.
+# Usage: helm upgrade --install jama charts/jama-connect -n jama-staging -f values/staging.yaml
+global:
+  fqdn: "jama.staging.example.com"    # OPERATOR
+  storageClass: ""                    # OPERATOR
+  imageTag: ""                        # OPERATOR: from kots pull
+
+elasticsearch:
+  replicas: 2
+  heapSize: "3g"
+  storageSize: "50Gi"
+
+sharedStorage:
+  tenantfs:
+    size: "50Gi"
+    accessModes: ["ReadWriteMany"]
+    storageClass: ""                  # OPERATOR: RWX-capable class
+
+ingress:
+  className: "nginx"                  # OPERATOR
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-staging"   # OPERATOR
+  tls:
+    enabled: true
+    secretName: "jama-staging-tls"
+
+networkPolicy:
+  enabled: true
+
+monitoring:
+  serviceMonitor:
+    enabled: true

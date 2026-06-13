@@ -1,0 +1,30 @@
+{{- if and .Values.ingress.enabled (eq .Values.ingress.type "httpproxy") }}
+{{- /*
+Contour HTTPProxy. Jama's bundled ingress is Contour (Envoy). Use this mode if
+your cluster runs Contour. Requires the projectcontour.io CRDs to be installed.
+*/ -}}
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: {{ include "jama.fullname" . }}
+  namespace: {{ include "jama.namespace" . }}
+  labels:
+    {{- include "jama.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  virtualhost:
+    fqdn: {{ .Values.global.fqdn | quote }}
+    {{- if .Values.ingress.tls.enabled }}
+    tls:
+      secretName: {{ .Values.ingress.tls.secretName }}
+    {{- end }}
+  routes:
+    - conditions:
+        - prefix: {{ .Values.ingress.path }}
+      services:
+        - name: {{ .Values.ingress.backendService }}
+          port: {{ .Values.ingress.backendPort }}
+{{- end }}

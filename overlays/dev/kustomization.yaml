@@ -1,0 +1,21 @@
+# Kustomize overlay (dev) — renders the jama-connect Helm chart with dev values.
+# Build with:  kustomize build --enable-helm overlays/dev
+# GitOps: Argo CD (kustomize.buildOptions: --enable-helm) or Flux (Kustomization
+# with .spec.postBuild / or a HelmRelease referencing values/dev.yaml) can consume this.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: jama-dev
+
+helmGlobals:
+  chartHome: ../../charts
+
+helmCharts:
+  - name: jama-connect
+    releaseName: jama
+    namespace: jama-dev
+    valuesFile: ../../values/dev.yaml
+    includeCRDs: true
+
+# Add environment-specific patches/resources here (e.g. a dev-only Secret stub,
+# extra labels). Keep secrets OUT of git — reference existing secrets instead.

@@ -1,0 +1,16 @@
+# Kustomize overlay (prod) — renders the jama-connect Helm chart with prod values.
+# Build with:  kustomize build --enable-helm overlays/prod
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: jama
+
+helmGlobals:
+  chartHome: ../../charts
+
+helmCharts:
+  - name: jama-connect
+    releaseName: jama
+    namespace: jama
+    valuesFile: ../../values/prod.yaml
+    includeCRDs: true

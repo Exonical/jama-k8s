@@ -1,0 +1,46 @@
+# Production environment overrides for the jama-connect chart.
+# Usage: helm upgrade --install jama charts/jama-connect -n jama -f values/prod.yaml
+global:
+  fqdn: "jama.example.com"            # OPERATOR
+  storageClass: ""                    # OPERATOR: production block-storage class
+  imageTag: ""                        # OPERATOR: pinned Jama release from kots pull
+  imagePullPolicy: IfNotPresent
+
+# Full search cluster.
+elasticsearch:
+  replicas: 3
+  heapSize: "6g"                      # Jama recommends 6g heap / 8Gi container
+  storageSize: "200Gi"
+
+sharedStorage:
+  tenantfs:
+    size: "500Gi"
+    accessModes: ["ReadWriteMany"]
+    storageClass: ""                  # OPERATOR: production RWX class (CephFS/EFS/Azure Files)
+
+ingress:
+  className: "nginx"                  # OPERATOR
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"      # OPERATOR
+  tls:
+    enabled: true
+    secretName: "jama-tls"
+
+networkPolicy:
+  enabled: true
+
+monitoring:
+  serviceMonitor:
+    enabled: true
+    interval: "30s"
+
+# Production-grade resource floors. Tune to your sizing guidance.
+components:
+  core:
+    resources:
+      requests: { cpu: "4", memory: "12Gi" }
+      limits: { memory: "16Gi" }
+  elasticsearch:
+    resources:
+      requests: { cpu: "2", memory: "8Gi" }
+      limits: { memory: "8Gi" }

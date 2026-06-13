@@ -1,0 +1,40 @@
+apiVersion: v2
+name: jama-connect
+description: >-
+  Vendor-neutral Helm chart for deploying Jama Connect (self-hosted) into an
+  existing Kubernetes cluster, without the Replicated KOTS/kURL installer.
+  Workload topology (core/core-ingress/core-jobs/core-reports, activemq,
+  hazelcast, elasticsearch, search, diff, saml, oauth, nginx, tenant-manager)
+  is derived from Jama's public self-hosted documentation. Image references,
+  ports, env, and probe details MUST be reconciled against the manifests
+  rendered by `scripts/kots-pull.sh` using your Jama license. See docs/.
+type: application
+
+# Chart version (this packaging). Bump on chart changes.
+version: 0.1.0
+
+# appVersion tracks the Jama Connect release this chart targets.
+# Confirm/override to match the release you render with `kots pull`.
+appVersion: "9.28.x"
+
+kubeVersion: ">=1.25.0-0"
+
+home: https://www.jamasoftware.com/
+sources:
+  - https://github.com/Exonical/jama-k8s
+keywords:
+  - jama
+  - jama-connect
+  - requirements-management
+  - alm
+
+maintainers:
+  - name: Platform Engineering
+    # Operator: replace with your team contact.
+
+annotations:
+  # This chart is a conversion scaffold. The authoritative source of truth for
+  # images/tags/env remains the KOTS application bundle rendered from your
+  # Jama license. Do not treat the defaults here as vendor-blessed values.
+  conversion.jama.io/source-bundle: "jama-k8s-standardkots (kURL installer v2026.05.18-0)"
+  conversion.jama.io/app-slug: "jama-k8s/standardkots"

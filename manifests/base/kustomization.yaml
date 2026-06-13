@@ -1,0 +1,7 @@
+# Base raw manifests shared by all environments (namespace only).
+# Operator-provided Secrets live in ../operator-secrets and are intentionally
+# NOT referenced here so placeholder values can never be applied by accident.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml

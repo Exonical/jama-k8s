@@ -1,0 +1,36 @@
+Jama Connect has been rendered into namespace: {{ include "jama.namespace" . }}
+
+Release:   {{ .Release.Name }}
+FQDN:      https://{{ .Values.global.fqdn }}
+Ingress:   {{ if .Values.ingress.enabled }}{{ .Values.ingress.type }} (class: {{ .Values.ingress.className }}){{ else }}disabled{{ end }}
+
+{{- if not .Values.license.existingSecret }}
+
+  ##############################################################################
+  # WARNING: license.existingSecret is NOT set.                                #
+  # Jama Connect requires a valid license. Create the license secret and set   #
+  # license.existingSecret before this deployment will be entitled to run.     #
+  #   kubectl -n {{ include "jama.namespace" . }} create secret generic jama-license \
+  #     --from-file=license.yaml=./license.yaml                                #
+  ##############################################################################
+{{- end }}
+
+{{- $placeholder := false }}
+{{- range $name, $comp := .Values.components }}
+{{- if and $comp.enabled (hasPrefix "jama/" $comp.image.repository) }}{{ $placeholder = true }}{{- end }}
+{{- end }}
+{{- if $placeholder }}
+
+  ##############################################################################
+  # WARNING: placeholder image repositories detected (jama/*).                 #
+  # Populate real image references from your licensed bundle:                  #
+  #   ./scripts/kots-pull.sh -l license.yaml -o ./_kots-rendered               #
+  # then reconcile values.yaml (see docs/IMAGE-INVENTORY.md).                  #
+  ##############################################################################
+{{- end }}
+
+Check rollout:
+  kubectl -n {{ include "jama.namespace" . }} get pods,sts,deploy,svc,pvc
+
+Run chart tests:
+  helm test {{ .Release.Name }} -n {{ include "jama.namespace" . }}
